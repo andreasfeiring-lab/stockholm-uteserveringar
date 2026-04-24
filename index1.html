@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Uteserveringar & Restauranger Stockholm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<style>
+  :root {
+    --sun:#F4A435; --sun-light:#FEF0D0; --amber:#D97706;
+    --dark:#18120A; --cream:#FAF5EC; --leaf:#3D7A3A; --leaf-light:#D4EDDA;
+    --shadow:0 4px 24px rgba(24,18,10,0.18);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;font-family:'DM Sans',sans-serif;overflow:hidden;}
+  #map{position:absolute;inset:0;z-index:0;}
+
+  /* HEADER */
+  #header{
+    position:absolute;top:0;left:0;right:0;z-index:500;
+    background:var(--dark);padding:0.55rem 1rem;
+    display:flex;align-items:center;gap:0.7rem;flex-wrap:wrap;
+    box-shadow:0 2px 20px rgba(0,0,0,0.5);
+  }
+  .logo{font-family:'Playfair Display',serif;font-size:1rem;color:var(--sun);white-space:nowrap;flex-shrink:0;}
+  .logo em{color:#FAF5EC;font-style:italic;font-weight:400;font-size:0.8rem;}
+  .pills{display:flex;gap:0.35rem;flex-wrap:wrap;}
+  .pill{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:100px;padding:0.22rem 0.6rem;font-size:0.7rem;color:#FAF5EC;display:flex;align-items:center;gap:0.22rem;white-space:nowrap;}
+  .pill b{color:var(--sun);font-weight:600;}
+  .filter-tabs{display:flex;gap:0.3rem;margin-left:auto;}
+  .ftab{background:rgba(255,255,255,0.07);border:1.5px solid rgba(255,255,255,0.15);border-radius:100px;padding:0.22rem 0.75rem;font-family:'DM Sans',sans-serif;font-size:0.72rem;font-weight:600;color:#FAF5EC;cursor:pointer;transition:all 0.18s;white-space:nowrap;}
+  .ftab.active-all{background:#fff;color:var(--dark);border-color:#fff;}
+  .ftab.active-ute{background:var(--sun);color:var(--dark);border-color:var(--sun);}
+  .ftab.active-rest{background:#4A90C4;color:#fff;border-color:#4A90C4;}
+
+  /* LOADING OVERLAY */
+  #loading{
+    position:absolute;inset:0;z-index:600;
+    background:var(--dark);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.2rem;
+    color:var(--cream);
+  }
+  #loading .load-logo{font-family:'Playfair Display',serif;font-size:1.8rem;color:var(--sun);}
+  #loading .load-sub{font-size:0.82rem;opacity:0.55;margin-top:-0.5rem;}
+  #progress-wrap{width:260px;height:6px;background:rgba(255,255,255,0.1);border-radius:100px;overflow:hidden;}
+  #progress-bar{height:100%;background:var(--sun);border-radius:100px;transition:width 0.3s ease;width:0%;}
+  #load-status{font-size:0.75rem;opacity:0.5;text-align:center;max-width:280px;}
+
+  /* SIDEBAR */
+  #sidebar{position:absolute;top:0;right:0;bottom:0;width:340px;z-index:400;background:var(--cream);box-shadow:-4px 0 32px rgba(0,0,0,0.2);display:flex;flex-direction:column;transform:translateX(100%);transition:transform 0.32s cubic-bezier(0.4,0,0.2,1);padding-top:52px;}
+  #sidebar.open{transform:translateX(0);}
+  #sb-close{position:absolute;top:60px;left:-38px;width:38px;height:38px;background:var(--dark);border:none;color:var(--sun);font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:8px 0 0 8px;}
+  #sb-close:hover{background:#2a1c0e;}
+  #sb-body{overflow-y:auto;flex:1;padding:1.2rem 1.3rem 2.5rem;scrollbar-width:thin;scrollbar-color:rgba(0,0,0,0.15) transparent;}
+  .type-chip{display:inline-flex;align-items:center;gap:0.3rem;font-size:0.68rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;padding:0.22rem 0.65rem;border-radius:100px;margin-bottom:0.7rem;}
+  .type-chip.ute{background:rgba(244,164,53,0.18);color:var(--amber);}
+  .type-chip.rest{background:rgba(74,144,196,0.15);color:#2878B8;}
+  .sb-name{font-family:'Playfair Display',serif;font-size:1.4rem;font-weight:700;line-height:1.15;margin-bottom:0.18rem;color:var(--dark);}
+  .sb-area{font-size:0.75rem;color:rgba(24,18,10,0.42);margin-bottom:0.8rem;}
+  .status-row{display:flex;align-items:center;gap:0.45rem;font-size:0.8rem;font-weight:600;margin-bottom:1rem;}
+  .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .dot-open{background:var(--leaf);box-shadow:0 0 0 3px var(--leaf-light);}
+  .dot-closed{background:#bbb;}
+  .price-row{display:flex;gap:0.6rem;margin-bottom:1rem;}
+  .price-card{flex:1;background:var(--dark);color:var(--cream);border-radius:12px;padding:0.7rem 0.9rem;text-align:center;}
+  .pc-label{font-size:0.58rem;letter-spacing:0.1em;text-transform:uppercase;opacity:0.4;margin-bottom:0.22rem;}
+  .pc-val{font-family:'Playfair Display',serif;font-size:1.45rem;font-weight:700;color:var(--sun);}
+  .pc-unit{font-size:0.65rem;opacity:0.42;margin-top:0.08rem;}
+  .sun-block{background:linear-gradient(135deg,#FFF9EC,#FEF0D0);border-radius:12px;padding:0.75rem 1rem;margin-bottom:1rem;border:1px solid rgba(244,164,53,0.2);}
+  .sun-label{font-size:0.62rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--amber);font-weight:600;}
+  .sun-val{font-family:'Playfair Display',serif;font-size:1.25rem;font-weight:700;color:var(--dark);}
+  .sun-sub{font-size:0.7rem;color:rgba(24,18,10,0.45);margin-top:0.1rem;}
+  .sun-prog-out{height:6px;background:rgba(0,0,0,0.08);border-radius:100px;overflow:hidden;margin-top:0.5rem;}
+  .sun-prog-in{height:100%;background:linear-gradient(90deg,var(--sun-light),var(--sun));border-radius:100px;}
+  .badges{display:flex;flex-wrap:wrap;gap:0.3rem;margin-bottom:1rem;}
+  .badge{font-size:0.67rem;font-weight:500;padding:0.2rem 0.55rem;border-radius:100px;}
+  .badge-sun{background:#FEF0D0;color:var(--amber);}
+  .badge-dog{background:#FDE8F5;color:#A0479A;}
+  .badge-view{background:#E8F4FD;color:#2878B8;}
+  .badge-cozy{background:var(--leaf-light);color:var(--leaf);}
+  .badge-food{background:#FFF0E0;color:var(--amber);}
+  .badge-hip{background:#EDE8FD;color:#6A50C7;}
+  .sb-note{font-size:0.77rem;color:rgba(24,18,10,0.58);line-height:1.55;font-style:italic;border-left:3px solid var(--sun);padding-left:0.7rem;margin-bottom:0.9rem;}
+  .sb-hours{font-size:0.72rem;color:rgba(24,18,10,0.42);}
+  .sb-addr{font-size:0.72rem;color:rgba(24,18,10,0.38);margin-top:0.4rem;}
+
+  /* MARKERS */
+  .mk{width:46px;height:54px;display:flex;align-items:flex-start;justify-content:center;cursor:pointer;position:relative;}
+  .mk-bubble{width:46px;height:46px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.55);border:2.5px solid rgba(255,255,255,0.85);}
+  .mk-open.t-ute  .mk-bubble{background:#1a1208;}
+  .mk-open.t-rest .mk-bubble{background:#0d2035;}
+  .mk-closed .mk-bubble{background:#555;}
+  .mi{transform:rotate(45deg);font-size:1.3rem;line-height:1;}
+
+  /* POPUP */
+  .leaflet-popup-content-wrapper{border-radius:14px !important;padding:0 !important;font-family:'DM Sans',sans-serif !important;box-shadow:var(--shadow) !important;overflow:hidden;min-width:220px;}
+  .leaflet-popup-content{margin:0 !important;}
+  .leaflet-popup-tip-container{display:none;}
+  .pu{padding:0.85rem 1rem;}
+  .pu-name{font-family:'Playfair Display',serif;font-size:1rem;font-weight:700;margin-bottom:0.1rem;}
+  .pu-type{font-size:0.65rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:0.4rem;}
+  .pu-type.ute{color:var(--amber);}
+  .pu-type.rest{color:#2878B8;}
+  .pu-area{font-size:0.68rem;color:rgba(24,18,10,0.38);margin-bottom:0.45rem;}
+  .pu-prices{display:flex;gap:0.35rem;margin-bottom:0.42rem;}
+  .pu-p{background:var(--dark);color:var(--sun);border-radius:7px;padding:0.18rem 0.5rem;font-size:0.76rem;font-weight:700;}
+  .pu-status{font-size:0.68rem;font-weight:600;}
+  .pu-open{color:var(--leaf);}
+  .pu-closed{color:#aaa;}
+  .pu-btn{display:block;width:100%;background:var(--dark);color:var(--sun);border:none;padding:0.48rem;font-family:'DM Sans',sans-serif;font-size:0.74rem;font-weight:600;cursor:pointer;}
+  .pu-btn:hover{background:#2a1c0e;}
+
+  #count{position:absolute;bottom:1.2rem;left:50%;transform:translateX(-50%);z-index:400;background:var(--dark);color:var(--cream);font-size:0.72rem;font-weight:500;padding:0.35rem 1rem;border-radius:100px;pointer-events:none;box-shadow:var(--shadow);white-space:nowrap;}
+  #count b{color:var(--sun);}
+
+  @media(max-width:600px){#sidebar{width:100%;padding-top:105px;}#sb-close{top:113px;}}
+</style>
+</head>
+<body>
+
+<!-- LOADING SCREEN -->
+<div id="loading">
+  <div class="load-logo">🍺 Stockholm</div>
+  <div class="load-sub">Hämtar riktiga koordinater via OpenStreetMap…</div>
+  <div id="progress-wrap"><div id="progress-bar"></div></div>
+  <div id="load-status">Startar…</div>
+</div>
+
+<div id="header" style="display:none">
+  <div class="logo">Uteserveringar & Restauranger <em>Stockholm</em></div>
+  <div class="pills">
+    <div class="pill">🌡️ <b id="tempVal">—°C</b></div>
+    <div class="pill">💨 <b id="windVal">— m/s</b></div>
+    <div class="pill">🌅 Sol kvar: <b id="sunVal">laddar…</b></div>
+  </div>
+  <div class="filter-tabs">
+    <button class="ftab active-all" onclick="setFilter('all',this)">☀️ Alla</button>
+    <button class="ftab" onclick="setFilter('ute',this)">🪑 Uteservering</button>
+    <button class="ftab" onclick="setFilter('rest',this)">🍽️ Restaurang / Bar</button>
+  </div>
+</div>
+
+<div id="map"></div>
+<div id="count" style="display:none"><b id="openCount">—</b> öppna · <b id="totalCount">—</b> visas</div>
+
+<div id="sidebar">
+  <button id="sb-close" onclick="closeSidebar()">✕</button>
+  <div id="sb-body"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+// ── VENUE DATA (name, address, type, openHours, badges, beer, wine, note) ────
+// type: 'ute' = uteservering, 'rest' = restaurang/bar
+const E=(l)=>({c:"badge-sun",l}),V=(l)=>({c:"badge-view",l}),D=(l)=>({c:"badge-dog",l}),C=(l)=>({c:"badge-cozy",l}),F=(l)=>({c:"badge-food",l}),H=(l)=>({c:"badge-hip",l});
+
+const VENUES = [
+  // ── UTESERVERINGAR ────────────────────────────────────────────────────────
+  {name:"Mälarpaviljongen",       addr:"Norr Mälarstrand 64, Stockholm",               type:"ute",  oh:[11,22],badges:[E("☀️ Söderläge"),V("🌊 Mälarutsikt"),D("🐾 Hundvänlig"),F("🍽️ Matkök")],beer:98, wine:112,note:"Ikonen vid Mälaren – boka bord på helger."},
+  {name:"Strandbryggan",          addr:"Norr Mälarstrand 15, Stockholm",               type:"ute",  oh:[11,22],badges:[E("☀️ Full sol"),V("🌊 Mälaren"),F("🍽️ Matkök")],beer:92,wine:110,note:"Alldeles vid Mälaren – sommarvibe hela dagen."},
+  {name:"Boulebar Rålambshovsparken", addr:"Rålambshovsparken, Stockholm",             type:"ute",  oh:[12,22],badges:[E("☀️ Full sol"),D("🐾 Hundvänlig"),F("🍽️ Mat")],beer:84,wine:105,note:"Pétanque och mat vid Mälaren."},
+  {name:"Restaurang Mälarterassen",addr:"Hantverkargatan 1, Stockholm",                type:"ute",  oh:[11,22],badges:[E("☀️ Västerläge"),V("🌊 Mot Stadshuset"),F("🍽️ Matkök")],beer:95,wine:118,note:"Kvällssolen speglas i Mälaren mot Stadshuset."},
+  {name:"Trädgården",             addr:"Hammarby Slussväg 2, Stockholm",               type:"ute",  oh:[15,23],badges:[E("☀️ Full sol"),H("✦ Kultplats"),D("🐾 Hundvänlig")],beer:85,wine:105,note:"Stockholms största uteservering. DJ på helger."},
+  {name:"Gondolen terrassen",     addr:"Stadsgårdsleden 6, Stockholm",                 type:"ute",  oh:[17,23],badges:[V("🌊 Stockholms bästa utsikt"),E("☀️ Kvällssol")],beer:119,wine:145,note:"Hänger under Katarinahissen – en klassiker."},
+  {name:"Tantolundens Krog",      addr:"Ringvägen 24, Stockholm",                      type:"ute",  oh:[11,21],badges:[E("☀️ Öppen park"),D("🐾 Hundvänlig"),F("🍽️ Matkök")],beer:82,wine:100,note:"Grön oas i Tantolunden."},
+  {name:"Fotografiska Terrassen", addr:"Stadsgårdshamnen 22, Stockholm",               type:"ute",  oh:[10,23],badges:[V("🌊 Mot Djurgården"),H("✦ Museumsterrass"),E("☀️ Söderläge")],beer:110,wine:148,note:"Terrassen på Fotografiska med fantastisk utsikt."},
+  {name:"Solliden",               addr:"Djurgårdsslätten 49, Stockholm",               type:"ute",  oh:[11,21],badges:[E("☀️ Panoramaterrass"),V("🌊 Utsikt över stan"),F("🍽️ Restaurang")],beer:105,wine:130,note:"Fantastisk utsikt från Skansen."},
+  {name:"Rosendals Trädgård",     addr:"Rosendalsterrassen 12, Stockholm",             type:"ute",  oh:[11,17],badges:[E("☀️ Söderläge"),C("🌿 Trädgårdsidyll"),F("🍽️ Café & bakeri")],beer:0,wine:115,note:"Ekologisk trädgård – vin & fantastisk mat."},
+  {name:"Villa Godthem",          addr:"Rosendalsvägen 9, Stockholm",                  type:"ute",  oh:[11,21],badges:[E("☀️ Söderläge"),V("🌊 Djurgårdslandskap"),F("🍽️ Restaurang")],beer:108,wine:135,note:"Vacker sekelskiftesrestaurang på Djurgården."},
+  {name:"Hasselbacken",           addr:"Hazeliusbacken 20, Stockholm",                 type:"ute",  oh:[11,22],badges:[E("☀️ Öppen terrass"),V("🌊 Parkutsikt"),F("🍽️ Restaurang")],beer:102,wine:128,note:"Historisk hotelterrass på Djurgården."},
+  {name:"Strandvägen Uteservering",addr:"Strandvägen 7B, Stockholm",                  type:"ute",  oh:[8,20],badges:[E("☀️ Söderläge"),V("🌊 Strandvägen")],beer:89,wine:119,note:"Perfekt för ett glas i kvällssolen längs Strandvägen."},
+  {name:"Lydmar Hotel Terrace",   addr:"Södra Blasieholmshamnen 2, Stockholm",         type:"ute",  oh:[12,22],badges:[V("🌊 Mot Djurgården"),H("✦ Hotellterrass")],beer:115,wine:155,note:"Stilren hotelterrass mot Nationalmuseum."},
+  {name:"Sturehof Terrassen",     addr:"Stureplan 2, Stockholm",                       type:"ute",  oh:[11,1],badges:[E("☀️ Full sol"),V("🌊 Stureplan"),F("🍽️ Klassisk krog")],beer:108,wine:138,note:"Stockholms mest kända terrass vid Stureplan."},
+  {name:"Berns Uteservering",     addr:"Berzelii Park 9, Stockholm",                   type:"ute",  oh:[11,23],badges:[E("☀️ Söderläge"),H("✦ Kulturhus"),F("🍽️ Restaurang")],beer:105,wine:135,note:"Elegant terrass vid Berzelii park."},
+  {name:"Café Rosenhill",         addr:"Humlegårdsparken, Stockholm",                  type:"ute",  oh:[9,19],badges:[E("☀️ Parkläge"),C("🌿 Humlegården"),D("🐾 Hundvänlig")],beer:0,wine:105,note:"Mysigt parkkaffe med hundvänlig terrass."},
+  {name:"Smak",                   addr:"Kungsträdgårdsgatan 2, Stockholm",             type:"ute",  oh:[11,22],badges:[E("☀️ Full sol"),V("🌊 Kungsträdgården"),F("🍽️ Restaurang")],beer:98,wine:125,note:"Mitt i Kungsträdgårdens park."},
+  {name:"Operakällaren Terrassen",addr:"Karl XII:s Torg, Stockholm",                   type:"ute",  oh:[11,23],badges:[E("☀️ Söderläge"),V("🌊 Kungliga slottet"),F("🍽️ Finrestaurang")],beer:135,wine:175,note:"En av Stockholms mest exklusiva terrasser."},
+  {name:"Sjätte Tunnan",          addr:"Östra Långgatan 7, Gamla Stan, Stockholm",     type:"ute",  oh:[12,23],badges:[V("🌊 Gamla Stan"),C("🌿 Mysig gränd")],beer:85,wine:105,note:"Charmig uteservering i hjärtat av Gamla Stan."},
+  {name:"Bistro Pastis",          addr:"Gamla Stan, Stockholm",                        type:"ute",  oh:[11,22],badges:[C("🌿 Kullerstensgränd"),F("🍽️ Franska bistro")],beer:90,wine:118,note:"Fransk bistro på kullersten i Gamla Stan."},
+  {name:"Stallmästaregården",     addr:"Norrtull 1, Stockholm",                        type:"ute",  oh:[11,22],badges:[E("☀️ Full sol"),V("🌊 Brunnsviken"),F("🍽️ Restaurang"),D("🐾 Hundvänlig")],beer:112,wine:145,note:"Slottsmiljö vid Brunnsviken."},
+  {name:"Fjäderholmarnas Krog",   addr:"Fjäderholmarna, Stockholm",                    type:"ute",  oh:[11,21],badges:[E("☀️ Skärgårdssol"),V("🌊 360° havsvy"),F("🍽️ Restaurang")],beer:108,wine:138,note:"Ta båten dit – unik skärgårdsuteservering."},
+  {name:"Långholmens Wärdshus",   addr:"Långholmsmuren 20, Stockholm",                 type:"ute",  oh:[11,21],badges:[E("☀️ Söderläge"),V("🌊 Mälarutsikt"),D("🐾 Hundvänlig"),F("🍽️ Restaurang")],beer:92,wine:112,note:"Idyllisk ö-uteservering nås via bro från Hornstull."},
+  {name:"Hornhuset",              addr:"Hornstulls Strand 3, Stockholm",               type:"ute",  oh:[16,23],badges:[D("🐾 Hundvänlig"),H("✦ Hornstulls nav")],beer:79,wine:95,note:"Avslappnad stämning på Hornstull."},
+  {name:"Landet",                 addr:"John Ericssons väg 6, Stockholm",              type:"ute",  oh:[16,23],badges:[H("✦ Kulturscen"),D("🐾 Hundvänlig")],beer:80,wine:99,note:"Kreativ kulturbar med stor terrass och livemusik."},
+  {name:"Lyktan",                 addr:"Upplandsgatan 10, Stockholm",                  type:"ute",  oh:[15,23],badges:[D("🐾 Hundvänlig"),C("🌿 Lugn terrass")],beer:75,wine:92,note:"Liten mysig terrass i Vasastan."},
+  {name:"Tanto Beach Club",       addr:"Tantolunden, Stockholm",                       type:"ute",  oh:[12,21],badges:[E("☀️ Strandläge"),D("🐾 Hundvänlig")],beer:79,wine:98,note:"Solstolar, sand och öl i Tantolunden."},
+  {name:"Sjöpaviljongen",         addr:"Djurgårdsbrunnsviken, Stockholm",              type:"ute",  oh:[11,21],badges:[E("☀️ Full sol"),V("🌊 Sjöutsikt"),F("🍽️ Restaurang")],beer:98,wine:122,note:"Idyllisk paviljonguteservering vid Djurgårdsbrunnsviken."},
+  {name:"Josefina",               addr:"Odengatan 46, Stockholm",                      type:"ute",  oh:[11,22],badges:[C("🌿 Innergård"),F("🍽️ Matkök"),D("🐾 Hundvänlig")],beer:80,wine:98,note:"Lugn innergård nära Odenplan."},
+  {name:"Vapor",                  addr:"Hammarby Allé 47, Stockholm",                  type:"ute",  oh:[15,23],badges:[E("☀️ Sjöläge"),V("🌊 Hammarby Sjö"),H("✦ Urban terrass")],beer:88,wine:115,note:"Trendig terrass vid Hammarby Sjö."},
+  {name:"Kastanjen",              addr:"Bergsgatan 20, Stockholm",                     type:"ute",  oh:[11,22],badges:[C("🌿 Innergård"),F("🍽️ Matkök"),D("🐾 Hundvänlig")],beer:82,wine:105,note:"Mysig innergård på Kungsholmen."},
+  {name:"Poms Terrass",           addr:"Tegnérgatan 32, Stockholm",                   type:"ute",  oh:[11,21],badges:[E("☀️ Söderläge"),D("🐾 Hundvänlig")],beer:78,wine:98,note:"Öppen terrass i Vasastan."},
+  {name:"Reimersholme",           addr:"Reimersholmsgatan 1, Stockholm",               type:"ute",  oh:[12,21],badges:[E("☀️ Full sol"),V("🌊 Mälaren"),D("🐾 Hundvänlig")],beer:85,wine:108,note:"Liten ö vid Liljeholmen – fridfullt och soligt."},
+  {name:"Sillbåten",              addr:"Skeppsbron 34, Stockholm",                     type:"ute",  oh:[11,22],badges:[E("☀️ Söderläge"),V("🌊 Strömmen")],beer:92,wine:115,note:"Traditionell sillbåt vid Skeppsbron."},
+  {name:"Nacka Strand Terrass",   addr:"Augustendalstorget 4, Nacka",                  type:"ute",  oh:[11,21],badges:[E("☀️ Västerläge"),V("🌊 Mot Djurgården"),F("🍽️ Matkök")],beer:95,wine:118,note:"Terrass med utsikt mot Djurgården."},
+  {name:"Röda Huset Terrass",     addr:"Djurgårdsvägen 68, Stockholm",                 type:"ute",  oh:[11,20],badges:[E("☀️ Söderläge"),V("🌊 Djurgårdskanalen")],beer:88,wine:112,note:"Solig terrass vid spårvägen mot Djurgårdskanalen."},
+  {name:"Vasaparken Café",        addr:"Vasaparken, Stockholm",                        type:"ute",  oh:[9,18],badges:[E("☀️ Parkläge"),D("🐾 Hundvänlig"),C("🌿 Grönska")],beer:0,wine:88,note:"Lugnt parkkaffe i Vasaparken."},
+  {name:"Lilla Ego Trädgård",     addr:"Västmannagatan 69, Stockholm",                 type:"ute",  oh:[17,22],badges:[C("🌿 Trädgårdsterrass"),F("🍽️ Krog")],beer:0,wine:130,note:"Prisbelönt krog med trädgårdsterrass – boka i förväg."},
+  {name:"Djurgårdsbron Café",     addr:"Djurgårdsbron, Stockholm",                     type:"ute",  oh:[9,18],badges:[E("☀️ Broläge"),V("🌊 Kanal")],beer:0,wine:98,note:"Café vid Djurgårdsbron med kanalvy."},
+  {name:"Kastellholmen",          addr:"Kastellholmen, Stockholm",                     type:"ute",  oh:[11,20],badges:[E("☀️ Full sol"),V("🌊 360° skärgårdsvy"),D("🐾 Hundvänlig")],beer:88,wine:110,note:"Fridfull ö med unik panoramautsikt."},
+  {name:"Gröna Lunds Terrass",    addr:"Lilla Allmänna Gränd 9, Stockholm",            type:"ute",  oh:[12,22],badges:[V("🌊 Mot Söder"),E("☀️ Söderläge")],beer:95,wine:120,note:"Utsikt mot Södermalm – öppet vid Grönan."},
+  {name:"Boulebar Kungsholmen",   addr:"Fridhemsgatan 55, Stockholm",                  type:"ute",  oh:[12,22],badges:[E("☀️ Sol"),D("🐾 Hundvänlig")],beer:84,wine:102,note:"Pétanque och avkoppling på Kungsholmen."},
+  {name:"Tanto Beach Bar",        addr:"Tantolundsvägen, Stockholm",                   type:"ute",  oh:[12,22],badges:[E("☀️ Strandläge"),H("✦ Sommarvibe")],beer:78,wine:96,note:"Enkel strandbar längs Mälaren i Tantolunden."},
+  {name:"Eddys Grill",            addr:"Rosendalsvägen 6, Stockholm",                  type:"ute",  oh:[11,20],badges:[E("☀️ Naturtomt"),C("🌿 Djurgårdsidyll"),F("🍽️ Grill")],beer:88,wine:108,note:"Enkel grilluteservering i Djurgårdens grönska."},
+  {name:"Skansen Terrassen",      addr:"Djurgårdsslätten 49, Stockholm",               type:"ute",  oh:[10,20],badges:[E("☀️ Söderläge"),V("🌊 Parkutsikt")],beer:92,wine:115,note:"Solig terrass inne på Skansen."},
+  {name:"Östermalms Saluhall Café",addr:"Östermalmstorg, Stockholm",                   type:"ute",  oh:[9,18],badges:[F("🍽️ Delikatess"),C("🌿 Salustorgkänsla")],beer:0,wine:119,note:"Uteservering vid saluhallen – vin och chark."},
+  {name:"Sjöpaviljongen Haga",    addr:"Hagaparken, Solna",                            type:"ute",  oh:[11,21],badges:[E("☀️ Full sol"),V("🌊 Brunnsviken"),D("🐾 Hundvänlig")],beer:92,wine:115,note:"Vacker paviljonguteservering i Hagaparken."},
+  {name:"Frihamnen Terrass",      addr:"Frihamnen, Stockholm",                         type:"ute",  oh:[11,21],badges:[E("☀️ Full sol"),V("🌊 Hamn & vatten")],beer:88,wine:108,note:"Avslappnad hamnuteservering med sol."},
+  {name:"Vapor Hammarby",         addr:"Sickla Kanalgata 8, Stockholm",                type:"ute",  oh:[12,22],badges:[E("☀️ Kanalläge"),V("🌊 Hammarby Sjöstad"),H("✦ Trendig")],beer:86,wine:112,note:"Ny trendig kanalterrass i Hammarby Sjöstad."},
+
+  // ── RESTAURANGER / BARS ───────────────────────────────────────────────────
+  {name:"Kvarnen",                addr:"Tjärhovsgatan 4, Stockholm",                   type:"rest", oh:[11,23],badges:[D("🐾 Hundvänlig"),C("🌿 Innergård")],beer:79,wine:98,note:"Klassisk Stockholmskrog med innergård."},
+  {name:"Pelikan",                addr:"Blekingegatan 40, Stockholm",                  type:"rest", oh:[11,23],badges:[D("🐾 Hundvänlig"),C("🌿 Innergård"),F("🍽️ Husmanskost")],beer:76,wine:95,note:"Klassisk krog med husmanskost."},
+  {name:"Himlen",                 addr:"Götgatan 78, Stockholm",                       type:"rest", oh:[16,1],badges:[V("🌊 Panorama 26 vån"),H("✦ Sky Bar")],beer:125,wine:165,note:"360° vy från 26 våningen. Dresscode gäller."},
+  {name:"Södra Bar",              addr:"Medborgarplatsen 8, Stockholm",                type:"rest", oh:[17,1],badges:[H("✦ Takbar"),E("☀️ Kvällssol")],beer:95,wine:120,note:"Populär takbar vid Medborgarplatsen."},
+  {name:"Marie Laveau",           addr:"Hornsgatan 66, Stockholm",                     type:"rest", oh:[17,23],badges:[H("✦ Cocktailbar"),D("🐾 Hundvänlig")],beer:82,wine:108,note:"Hipster-klassiker på Hornstull."},
+  {name:"Fotografiska Mat & Bar", addr:"Stadsgårdshamnen 22, Stockholm",               type:"rest", oh:[10,1],badges:[H("✦ Museumsrestaurang"),F("🍽️ Matkök")],beer:105,wine:148,note:"Restaurangen inuti Fotografiska – öppen sent."},
+  {name:"Mosebacke Etablissement",addr:"Mosebacke Torg 3, Stockholm",                 type:"rest", oh:[17,1],badges:[H("✦ Teater & bar"),V("🌊 Utsikt")],beer:88,wine:118,note:"Teater, bar och fantastisk utsikt på Mosebacke."},
+  {name:"Akkurat",                addr:"Hornsgatan 18, Stockholm",                     type:"rest", oh:[12,1],badges:[H("✦ Ölbar"),D("🐾 Hundvänlig")],beer:85,wine:0,note:"Stockholms bästa ölbar med enormt hantverksölsutbud."},
+  {name:"Nytorget Urban Deli",    addr:"Nytorget 4, Stockholm",                        type:"rest", oh:[7,23],badges:[F("🍽️ Deli & bar"),H("✦ Hipster")],beer:88,wine:118,note:"Mataffär, deli, restaurang och bar i ett."},
+  {name:"Djuret",                 addr:"Lilla Nygatan 5, Stockholm",                   type:"rest", oh:[17,23],badges:[H("✦ Nose to tail"),F("🍽️ Kött & smak")],beer:0,wine:162,note:"Konceptkrog med ett helt djur per vecka."},
+  {name:"Pharmarium",             addr:"Stortorget 7, Stockholm",                      type:"rest", oh:[15,1],badges:[H("✦ Apotekar-bar"),H("✦ Cocktails")],beer:95,wine:138,note:"Unik cocktailbar i ett gammalt apotek i Gamla Stan."},
+  {name:"Den Gyldene Freden",     addr:"Österlånggatan 51, Stockholm",                 type:"rest", oh:[11,23],badges:[C("🌿 Historisk"),F("🍽️ Husmanskost")],beer:95,wine:125,note:"Världens äldsta ännu verksamma krog – grundad 1722."},
+  {name:"Tradition",              addr:"Österlånggatan 1, Stockholm",                  type:"rest", oh:[11,22],badges:[F("🍽️ Husmanskost"),C("🌿 Historisk")],beer:88,wine:110,note:"Klassisk husmanskost i Gamla Stans hjärta."},
+  {name:"Wirströms Pub",          addr:"Stora Nygatan 21, Stockholm",                  type:"rest", oh:[11,1],badges:[H("✦ Pub"),D("🐾 Hundvänlig")],beer:78,wine:88,note:"Populär irländsk pub i Gamla Stan med livemusik."},
+  {name:"Café Opera",             addr:"Karl XII:s Torg 6, Stockholm",                 type:"rest", oh:[12,1],badges:[H("✦ Nattliv"),V("🌊 Operan")],beer:110,wine:145,note:"Populär nattklubb och bar vid Operan."},
+  {name:"Svartengrens",           addr:"Tulegatan 24, Stockholm",                      type:"rest", oh:[17,23],badges:[H("✦ Vinbar"),C("🌿 Liten terrass")],beer:88,wine:125,note:"Populär vinbar med liten terrass."},
+  {name:"Hillenberg",             addr:"Humlegårdsgatan 14, Stockholm",                type:"rest", oh:[11,23],badges:[F("🍽️ Brasserie"),H("✦ Modern klassiker")],beer:95,wine:135,note:"Modern brasserie nära Stureplan."},
+  {name:"Riche",                  addr:"Birger Jarlsgatan 4, Stockholm",               type:"rest", oh:[11,1],badges:[H("✦ Stockholmsklassiker"),F("🍽️ Restaurang & bar")],beer:98,wine:138,note:"Institution på Birger Jarlsgatan – se och synas."},
+  {name:"Prinsen",                addr:"Mäster Samuelsgatan 4, Stockholm",             type:"rest", oh:[11,23],badges:[C("🌿 Intim matsal"),F("🍽️ Husmanskost")],beer:85,wine:110,note:"Klassisk Stockholmskrog från 1897."},
+  {name:"Omakase by Ryoki",       addr:"Kommendörsgatan 16, Stockholm",                type:"rest", oh:[17,22],badges:[H("✦ Fine dining"),F("🍽️ Japansk")],beer:0,wine:185,note:"Stockholms bästa omakase."},
+  {name:"Mathias Dahlgren Matbaren",addr:"Södra Blasieholmshamnen 6, Stockholm",       type:"rest", oh:[12,23],badges:[H("✦ Stjärnkrog"),F("🍽️ Fine dining")],beer:0,wine:195,note:"Stjärnkrogskoncept i Grand Hôtel."},
+  {name:"Agrikultur",             addr:"Roslagsgatan 18, Stockholm",                   type:"rest", oh:[17,22],badges:[H("✦ Kretslopp"),F("🍽️ Säsongsmat")],beer:0,wine:148,note:"Ekologisk säsongsdriven matlagning."},
+  {name:"AG Restaurant",          addr:"Kronobergsgatan 37, Stockholm",                type:"rest", oh:[17,23],badges:[H("✦ Köttrestaurang"),F("🍽️ Fine dining")],beer:0,wine:175,note:"Stockholms mest omtalade köttrestaurang."},
+  {name:"Brasserie Bobonne",      addr:"Tegnérgatan 8, Stockholm",                     type:"rest", oh:[11,23],badges:[F("🍽️ Franska"),C("🌿 Mysig bistro")],beer:0,wine:135,note:"Autentisk fransk bistro i Vasastan."},
+  {name:"Tranan",                 addr:"Karlbergsvägen 14, Stockholm",                 type:"rest", oh:[11,23],badges:[F("🍽️ Husmanskost"),H("✦ Stockholmsklassiker")],beer:88,wine:112,note:"Stockholms mest älskade krog i Vasastan."},
+  {name:"Lilla Ego",              addr:"Västmannagatan 69, Stockholm",                 type:"rest", oh:[17,22],badges:[C("🌿 Vinbar"),F("🍽️ Krog")],beer:0,wine:145,note:"Prisbelönt vinbar och krog i Vasastan."},
+  {name:"Corner Club",            addr:"Stureplan 2, Stockholm",                       type:"rest", oh:[17,1],badges:[H("✦ Cocktailbar"),H("✦ Exklusiv")],beer:0,wine:155,note:"Exklusiv cocktailbar bakom Stureplan."},
+  {name:"Pubologerna",            addr:"Dalagatan 7, Stockholm",                       type:"rest", oh:[16,1],badges:[H("✦ Pub"),D("🐾 Hundvänlig")],beer:79,wine:88,note:"Klassisk pub i Vasastan – sport och hantverksöl."},
+  {name:"Babette",                addr:"Roslagsgatan 6, Stockholm",                    type:"rest", oh:[17,22],badges:[H("✦ Vinbar"),F("🍽️ Naturvin")],beer:0,wine:138,note:"Kärleksfullt naturvinskontor i Vasastan."},
+  {name:"Morfar Ginko",           addr:"Swedenborgsgatan 13, Stockholm",               type:"rest", oh:[17,23],badges:[H("✦ Cocktailbar"),C("🌿 Hipster")],beer:95,wine:125,note:"Populär cocktailbar och krog på Södermalm."},
+  {name:"Solidaritet",            addr:"Lästmakargatan 3, Stockholm",                  type:"rest", oh:[17,1],badges:[H("✦ Dansbar")],beer:90,wine:120,note:"Populär dansklubb och bar."},
+  {name:"Östergök",               addr:"Östermalmsgatan 41, Stockholm",                type:"rest", oh:[11,22],badges:[F("🍽️ Husmanskost"),C("🌿 Innergård")],beer:88,wine:108,note:"Populär krog på Östermalm med innergård."},
+  {name:"Frantzén",               addr:"Klara Norra Kyrkogata 26, Stockholm",          type:"rest", oh:[18,23],badges:[H("✦ 3 Michelin"),F("🍽️ Fine dining")],beer:0,wine:295,note:"Tre Michelin-stjärnor – Stockholms mest exklusiva bord."},
+  {name:"Nook",                   addr:"Brunnsgatan 4, Stockholm",                     type:"rest", oh:[11,23],badges:[H("✦ Hip"),F("🍽️ Fusion")],beer:88,wine:118,note:"Trendig fusionskrog centralt i Norrmalm."},
+  {name:"Hobo Bar",               addr:"Brunkebergstorg 4, Stockholm",                 type:"rest", oh:[12,1],badges:[H("✦ Hotellbar"),H("✦ Trendig")],beer:98,wine:135,note:"Stilren hotellbar på Generator Stockholm."},
+  {name:"Rebel",                  addr:"Lästmakargatan 18, Stockholm",                 type:"rest", oh:[16,1],badges:[H("✦ Cocktailbar"),H("✦ Nattliv")],beer:92,wine:128,note:"Populär cocktailbar i centrala Norrmalm."},
+  {name:"Bla Dörren",             addr:"Götgatan 53, Stockholm",                       type:"rest", oh:[11,22],badges:[F("🍽️ Frukost & lunch"),C("🌿 Mysig")],beer:0,wine:105,note:"Mysig Söder-restaurang med bra lunch och kaffe."},
+  {name:"Kvarteret",              addr:"Götgatan 71, Stockholm",                       type:"rest", oh:[11,22],badges:[C("🌿 Innergård"),F("🍽️ Matkök")],beer:78,wine:96,note:"Mysig innergård på Söder – lugnt och bra mat."},
+  {name:"Cocks & Cows Birger Jarl",addr:"Birger Jarlsgatan 12, Stockholm",             type:"rest", oh:[11,22],badges:[F("🍽️ Burgare"),H("✦ Populär")],beer:85,wine:95,note:"Populär burgarbar på Östermalm."},
+  {name:"Brasserie Elvira",       addr:"Bondegatan 1, Stockholm",                      type:"rest", oh:[11,22],badges:[F("🍽️ Franska"),C("🌿 Mysig bistro")],beer:0,wine:128,note:"Gemytlig fransk bistro på Södermalm."},
+  {name:"Djuret Gamla Stan",      addr:"Lilla Nygatan 5, Stockholm",                   type:"rest", oh:[17,23],badges:[H("✦ Nose to tail"),F("🍽️ Kött & smak")],beer:0,wine:162,note:"Konceptkrog – ett helt djur per vecka."},
+  {name:"Luzifer",                addr:"Hornsgatan 100, Stockholm",                    type:"rest", oh:[17,1],badges:[H("✦ Mörk bar"),H("✦ Metal")],beer:79,wine:95,note:"Södermalms mest rockiga bar."},
+  {name:"Katarina Restaurang",    addr:"Katarina Bangata 21, Stockholm",               type:"rest", oh:[11,22],badges:[F("🍽️ Husmanskost"),C("🌿 Välkomnande")],beer:82,wine:105,note:"Klassisk krog nära Medborgarplatsen."},
+  {name:"Bar Agrikultur",         addr:"Roslagsgatan 18, Stockholm",                   type:"rest", oh:[16,23],badges:[H("✦ Naturvin"),C("🌿 Intim bar")],beer:0,wine:145,note:"Naturvinbar med fokus på småproducenter."},
+  {name:"Tradition Gamla Stan",   addr:"Österlånggatan 1, Stockholm",                  type:"rest", oh:[11,22],badges:[F("🍽️ Husmanskost"),C("🌿 Historisk")],beer:88,wine:110,note:"Klassisk husmanskost i Gamla Stans hjärta."},
+  {name:"Lemon Bar",              addr:"Upplandsgatan 5, Stockholm",                   type:"rest", oh:[17,1],badges:[H("✦ Cocktailbar"),H("✦ Livlig")],beer:92,wine:128,note:"Trendig cocktailbar i Vasastan med bra drinks."},
+  {name:"Woodstockholm",          addr:"Mosebacke Torg 9, Stockholm",                  type:"rest", oh:[11,22],badges:[C("🌿 Trädgård"),F("🍽️ Matkök")],beer:84,wine:108,note:"Trädgårdsrestaurang med naturmaterial och bra mat."},
+  {name:"Sturehof Bar",           addr:"Stureplan 2, Stockholm",                       type:"rest", oh:[11,1],badges:[F("🍽️ Skaldjur"),H("✦ Institution")],beer:105,wine:138,note:"Klassisk skaldjursrestaurang och bar vid Stureplan."},
+  {name:"Restaurang Franzén Kitchen",addr:"Lilla Nygatan 21, Stockholm",               type:"rest", oh:[11,22],badges:[H("✦ Stjärnkockens bistro"),F("🍽️ Nordisk")],beer:0,wine:155,note:"Bistrokokonceptet från Björn Frantzén."},
+];
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let BARS = []; // filled after geocoding
+let sunsetHour=20.5, sunriseHour=5.5;
+let clusterGroup, map;
+let activeFilter='all';
+
+function isOpen(b){
+  const h=new Date().getHours()+new Date().getMinutes()/60;
+  if(b.oh[1]<b.oh[0]) return h>=b.oh[0]||h<b.oh[1];
+  return h>=b.oh[0]&&h<b.oh[1];
+}
+function fmtH(n){return(n%24).toString().padStart(2,'0')+':00';}
+function priceRating(p){return p<=85?'💚':p<=115?'🟡':'🔴';}
+function filtered(){return activeFilter==='all'?BARS:BARS.filter(b=>b.type===activeFilter);}
+
+// ── GEOCODING ─────────────────────────────────────────────────────────────────
+const GEO_CACHE_KEY = 'sthlm_geo_v3';
+
+async function geocodeAll() {
+  const cached = (() => { try { return JSON.parse(localStorage.getItem(GEO_CACHE_KEY)||'null'); } catch(e){return null;} })();
+
+  const bar = document.getElementById('progress-bar');
+  const status = document.getElementById('load-status');
+
+  // Check if cache is valid (same number of venues)
+  if (cached && cached.length === VENUES.length) {
+    status.textContent = 'Laddar från cache…';
+    bar.style.width = '100%';
+    BARS = cached;
+    return;
+  }
+
+  // Fresh geocode
+  const results = [];
+  for (let i = 0; i < VENUES.length; i++) {
+    const v = VENUES[i];
+    status.textContent = `Söker: ${v.name}… (${i+1}/${VENUES.length})`;
+    bar.style.width = ((i+1)/VENUES.length*100)+'%';
+
+    // Check if we have a cached result for this venue
+    const existing = (cached||[]).find(c=>c.name===v.name);
+    if (existing) { results.push({...v, lat:existing.lat, lng:existing.lng}); continue; }
+
+    try {
+      const q = encodeURIComponent(v.addr);
+      const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=se`;
+      const resp = await fetch(url, {headers:{'User-Agent':'StockholmBarMap/1.0'}});
+      const data = await resp.json();
+      if (data && data.length > 0) {
+        results.push({...v, lat:parseFloat(data[0].lat), lng:parseFloat(data[0].lon)});
+      } else {
+        // Fallback: search just the name in Stockholm
+        const q2 = encodeURIComponent(v.name+', Stockholm');
+        const r2 = await fetch(`https://nominatim.openstreetmap.org/search?q=${q2}&format=json&limit=1&countrycodes=se`,{headers:{'User-Agent':'StockholmBarMap/1.0'}});
+        const d2 = await r2.json();
+        if (d2 && d2.length > 0) {
+          results.push({...v, lat:parseFloat(d2[0].lat), lng:parseFloat(d2[0].lon)});
+        } else {
+          // Last resort fallback: Stockholm city center
+          results.push({...v, lat:59.3293+Math.random()*0.01-0.005, lng:18.0686+Math.random()*0.01-0.005});
+        }
+      }
+    } catch(e) {
+      results.push({...v, lat:59.3293+Math.random()*0.01-0.005, lng:18.0686+Math.random()*0.01-0.005});
+    }
+
+    // Nominatim rate limit: 1 req/sec
+    await new Promise(r => setTimeout(r, 1100));
+  }
+
+  try { localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(results)); } catch(e){}
+  BARS = results;
+}
+
+// ── MAP ───────────────────────────────────────────────────────────────────────
+function initMap(){
+  map=L.map('map',{center:[59.325,18.063],zoom:12,zoomControl:false});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'© OpenStreetMap © CARTO',maxZoom:19}).addTo(map);
+  L.control.zoom({position:'bottomright'}).addTo(map);
+  clusterGroup=L.markerClusterGroup({
+    maxClusterRadius:60, spiderfyOnMaxZoom:true, showCoverageOnHover:false, zoomToBoundsOnClick:true,
+    iconCreateFunction:function(cluster){
+      const count=cluster.getChildCount();
+      const sz=count<10?36:count<30?42:48;
+      return L.divIcon({
+        html:`<div style="width:${sz}px;height:${sz}px;background:var(--sun);color:var(--dark);border-radius:50%;border:3px solid white;display:flex;align-items:center;justify-content:center;font-family:'DM Sans',sans-serif;font-weight:700;font-size:${sz<42?'0.8':'0.9'}rem;box-shadow:0 3px 14px rgba(0,0,0,0.4);">${count}</div>`,
+        className:'',iconSize:[sz,sz]
+      });
+    }
+  });
+}
+
+function popupHTML(bar,idx){
+  const open=isOpen(bar);
+  const tl=bar.type==='ute'?'🪑 Uteservering':'🍽️ Restaurang / Bar';
+  return `<div class="pu">
+    <div class="pu-name">${bar.name}</div>
+    <div class="pu-type ${bar.type}">${tl}</div>
+    <div class="pu-area">📍 ${bar.addr}</div>
+    <div class="pu-prices">
+      ${bar.beer>0?`<span class="pu-p">🍺 ${bar.beer}:-</span>`:''}
+      ${bar.wine>0?`<span class="pu-p">🍷 ${bar.wine}:-</span>`:''}
+    </div>
+    <div class="pu-status ${open?'pu-open':'pu-closed'}">${open?'● Öppet nu':'○ Stängt'} · ${fmtH(bar.oh[0])}–${fmtH(bar.oh[1])}</div>
+  </div>
+  <button class="pu-btn" onclick="openSidebar(${idx})">Visa detaljer →</button>`;
+}
+
+function buildMarkers(){
+  clusterGroup.clearLayers();
+  const bars=filtered();
+  document.getElementById('openCount').textContent=bars.filter(isOpen).length;
+  document.getElementById('totalCount').textContent=bars.length;
+  bars.forEach(bar=>{
+    const idx=BARS.indexOf(bar);
+    const openNow=isOpen(bar);
+    const icon=L.divIcon({
+      className:'',
+      html:`<div class="mk ${openNow?'mk-open':'mk-closed'} t-${bar.type}"><div class="mk-bubble"><div class="mi">${bar.type==='ute'?'🍺':'🍽️'}</div></div></div>`,
+      iconSize:[46,54],iconAnchor:[23,54],popupAnchor:[0,-56]
+    });
+    const m=L.marker([bar.lat,bar.lng],{icon});
+    m.bindPopup(popupHTML(bar,idx),{closeButton:false,maxWidth:270});
+    clusterGroup.addLayer(m);
+  });
+  map.addLayer(clusterGroup);
+}
+
+function setFilter(type,btn){
+  activeFilter=type;
+  document.querySelectorAll('.ftab').forEach(b=>b.className='ftab');
+  btn.classList.add(type==='all'?'active-all':type==='ute'?'active-ute':'active-rest');
+  closeSidebar(); buildMarkers();
+}
+
+// ── SIDEBAR ───────────────────────────────────────────────────────────────────
+function openSidebar(idx){
+  const bar=BARS[idx];
+  map.closePopup();
+  const open=isOpen(bar);
+  const nowH=new Date().getHours()+new Date().getMinutes()/60;
+  const diff=sunsetHour-nowH;
+  const sunText=diff<=0?'Solen har gått ner':(Math.floor(diff)>0?Math.floor(diff)+'h ':'')+Math.round((diff%1)*60)+'min';
+  const sunsetStr=(()=>{const d=new Date(),t=sunsetHour;d.setHours(Math.floor(t),Math.round((t%1)*60),0);return d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});})();
+  const pct=Math.min(100,Math.max(0,((nowH-sunriseHour)/(sunsetHour-sunriseHour))*100));
+  document.getElementById('sb-body').innerHTML=`
+    <div class="type-chip ${bar.type}">${bar.type==='ute'?'🪑 Uteservering':'🍽️ Restaurang / Bar'}</div>
+    <div class="sb-name">${bar.name}</div>
+    <div class="sb-area">📍 ${bar.addr}</div>
+    <div class="status-row">
+      <span class="dot ${open?'dot-open':'dot-closed'}"></span>
+      ${open?`Öppet · stänger ${fmtH(bar.oh[1])}`:`Stängt · öppnar ${fmtH(bar.oh[0])}`}
+    </div>
+    <div class="price-row">
+      ${bar.beer>0?`<div class="price-card"><div class="pc-label">Öl 🍺</div><div class="pc-val">${bar.beer}:-</div><div class="pc-unit">${priceRating(bar.beer)} mellanöl</div></div>`:''}
+      ${bar.wine>0?`<div class="price-card"><div class="pc-label">Vin 🍷</div><div class="pc-val">${bar.wine}:-</div><div class="pc-unit">${priceRating(bar.wine)} glas</div></div>`:''}
+    </div>
+    <div class="sun-block">
+      <div class="sun-label">☀️ Sol kvar idag</div>
+      <div class="sun-val">${sunText}</div>
+      <div class="sun-sub">Solnedgång ${sunsetStr}</div>
+      <div class="sun-prog-out"><div class="sun-prog-in" style="width:${pct}%"></div></div>
+    </div>
+    <div class="badges">${(bar.badges||[]).map(b=>`<span class="badge ${b.c}">${b.l}</span>`).join('')}</div>
+    ${bar.note?`<div class="sb-note">${bar.note}</div>`:''}
+    <div class="sb-hours">🕐 ${fmtH(bar.oh[0])} – ${fmtH(bar.oh[1])}</div>
+  `;
+  document.getElementById('sidebar').classList.add('open');
+  map.panTo([bar.lat,bar.lng],{animate:true});
+}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');}
+
+// ── WEATHER ───────────────────────────────────────────────────────────────────
+async function loadWeather(){
+  try{
+    const r=await fetch('https://api.open-meteo.com/v1/forecast?latitude=59.33&longitude=18.07&current=temperature_2m,wind_speed_10m&timezone=Europe%2FStockholm');
+    const d=await r.json();
+    document.getElementById('tempVal').textContent=Math.round(d.current.temperature_2m)+'°C';
+    document.getElementById('windVal').textContent=Math.round(d.current.wind_speed_10m)+' m/s';
+  }catch(e){}
+}
+async function loadSunset(){
+  try{
+    const today=new Date().toISOString().split('T')[0];
+    const r=await fetch(`https://api.sunrise-sunset.org/json?lat=59.33&lng=18.07&formatted=0&date=${today}`);
+    const d=await r.json();
+    const toLocal=s=>new Date(new Date(s).toLocaleString('en-US',{timeZone:'Europe/Stockholm'}));
+    const ss=toLocal(d.results.sunset),sr=toLocal(d.results.sunrise);
+    sunsetHour=ss.getHours()+ss.getMinutes()/60;
+    sunriseHour=sr.getHours()+sr.getMinutes()/60;
+    updateSunPill(); setInterval(updateSunPill,60000);
+  }catch(e){document.getElementById('sunVal').textContent='~20:30';}
+}
+function updateSunPill(){
+  const nowH=new Date().getHours()+new Date().getMinutes()/60;
+  const diff=sunsetHour-nowH;
+  if(diff<=0){document.getElementById('sunVal').textContent='Gått ner';return;}
+  const hh=Math.floor(diff),mm=Math.round((diff%1)*60);
+  document.getElementById('sunVal').textContent=(hh>0?hh+'h ':'')+mm+'min';
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+(async function(){
+  initMap();
+  loadWeather();
+  loadSunset();
+
+  await geocodeAll();
+
+  // Fix badge reference (venues use array index 5 for badges)
+  // badges already set correctly
+
+  document.getElementById('loading').style.display='none';
+  document.getElementById('header').style.display='flex';
+  document.getElementById('count').style.display='block';
+  buildMarkers();
+})();
+</script>
+</body>
+</html>
